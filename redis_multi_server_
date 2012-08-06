@@ -1,0 +1,191 @@
+#!/usr/bin/env ruby
+require 'ostruct'
+
+class RedisInfo
+  class Item < OpenStruct
+  end
+
+  ITEM_LIST = [
+    Item.new(name: "uptime_in_seconds"               , key: nil   , key2: nil       , category: "server"      , info: "Number of seconds since Redis server start") ,
+    Item.new(name: "lru_clock"                       , key: nil   , key2: nil       , category: "server"      , info: "Clock incrementing every minute, for LRU management") ,
+    Item.new(name: "connected_clients"               , key: nil   , key2: nil       , category: "clients"     , info: "Number of client connections (excluding connections from slaves)") ,
+    Item.new(name: "client_longest_output_list"      , key: nil   , key2: nil       , category: "clients"     , info: "longest output list among current client connections") ,
+    Item.new(name: "client_biggest_input_buf"        , key: nil   , key2: nil       , category: "clients"     , info: "biggest input buffer among current client connections") ,
+    Item.new(name: "blocked_clients"                 , key: nil   , key2: nil       , category: "clients"     , info: "Number of clients pending on a blocking call (BLPOP, BRPOP, BRPOPLPUSH)") ,
+    Item.new(name: "used_memory"                     , key: nil   , key2: nil       , category: "memory"      , info: "total number of bytes allocated by Redis using its allocator (either standard libc, jemalloc, or an alternative allocator such as tcmalloc  (Ideally, the used_memory_rss value should be only slightly higher than used_memory. When rss >> used, a large difference means there is memory fragmentation (internal or external), which can be evaluated by checking mem_fragmentation_ratio. When used >> rss, it means part of Redis memory has been swapped off by the operating system: expect some significant latencies.  Because Redis does not have control over how its allocations are mapped to memory pages, high used_memory_rss is often the result of a spike in memory usage.  When Redis frees memory, the memory is given back to the allocator, and the allocator may or may not give the memory back to the system. There may be a discrepancy between the used_memory value and memory consumption as reported by the operating system. It may be due to the fact memory has been used and released by Redis, but not given back to the system. The used_memory_peak value is generally useful to check this point.)") ,
+    Item.new(name: "used_memory_rss"                 , key: nil   , key2: nil       , category: "memory"      , info: "Number of bytes that Redis allocated as seen by the operating system (a.k.a resident set size). This is the number reported by tools such as top and ps.") ,
+    Item.new(name: "used_memory_peak"                , key: nil   , key2: nil       , category: "memory"      , info: "Peak memory consumed by Redis (in bytes)") ,
+    Item.new(name: "used_memory_lua"                 , key: nil   , key2: nil       , category: "memory"      , info: "Number of bytes used by the Lua engine") ,
+    Item.new(name: "mem_fragmentation_ratio"         , key: nil   , key2: nil       , category: "memory"      , info: "Ratio between used_memory_rss and used_memory") ,
+    Item.new(name: "loading"                         , key: nil   , key2: nil       , category: "persistence" , info: "Flag indicating if the load of a dump file is on-going") ,
+    Item.new(name: "rdb_changes_since_last_save"     , key: nil   , key2: nil       , category: "persistence" , info: "Number of changes since the last dump  (changes_since_last_save refers to the number of operations that produced some kind of changes in the dataset since the last time either SAVE or BGSAVE was called.)") ,
+    Item.new(name: "rdb_bgsave_in_progress"          , key: nil   , key2: nil       , category: "persistence" , info: "Flag indicating a RDB save is on-going") ,
+    Item.new(name: "rdb_last_bgsave_time_sec"        , key: nil   , key2: nil       , category: "persistence" , info: "Duration of the last RDB save operation in seconds") ,
+    Item.new(name: "rdb_current_bgsave_time_sec"     , key: nil   , key2: nil       , category: "persistence" , info: "Duration of the on-going RDB save operation if any") ,
+    Item.new(name: "aof_rewrite_in_progress"         , key: nil   , key2: nil       , category: "persistence" , info: "Flag indicating a AOF rewrite operation is on-going") ,
+    Item.new(name: "aof_rewrite_scheduled"           , key: nil   , key2: nil       , category: "persistence" , info: "Flag indicating an AOF rewrite operation will be scheduled once the on-going RDB save is complete.") ,
+    Item.new(name: "aof_last_rewrite_time_sec"       , key: nil   , key2: nil       , category: "persistence" , info: "Duration of the last AOF rewrite operation in seconds") ,
+    Item.new(name: "aof_current_rewrite_time_sec"    , key: nil   , key2: nil       , category: "persistence" , info: "Duration of the on-going AOF rewrite operation if any") ,
+    Item.new(name: "aof_current_size"                , key: nil   , key2: nil       , category: "persistence" , info: "AOF current file size") ,
+    Item.new(name: "aof_base_size"                   , key: nil   , key2: nil       , category: "persistence" , info: "AOF file size on latest startup or rewrite") ,
+    Item.new(name: "aof_pending_rewrite"             , key: nil   , key2: nil       , category: "persistence" , info: "Flag indicating an AOF rewrite operation will be scheduled once the on-going RDB save is complete.") ,
+    Item.new(name: "aof_buffer_length"               , key: nil   , key2: nil       , category: "persistence" , info: "Size of the AOF buffer") ,
+    Item.new(name: "aof_rewrite_buffer_length"       , key: nil   , key2: nil       , category: "persistence" , info: "Size of the AOF rewrite buffer") ,
+    Item.new(name: "aof_pending_bio_fsync"           , key: nil   , key2: nil       , category: "persistence" , info: "Number of fsync pending jobs in background I/O queue") ,
+    Item.new(name: "aof_delayed_fsync"               , key: nil   , key2: nil       , category: "persistence" , info: "Delayed fsync counter") ,
+    Item.new(name: "loading_total_bytes"             , key: nil   , key2: nil       , category: "load"        , info: "Total file size") ,
+    Item.new(name: "loading_loaded_bytes"            , key: nil   , key2: nil       , category: "load"        , info: "Number of bytes already loaded") ,
+    Item.new(name: "total_connections_received"      , key: nil   , key2: nil       , category: "stats"       , info: "Total number of connections accepted by the server") ,
+    Item.new(name: "total_commands_processed"        , key: nil   , key2: nil       , category: "stats"       , info: "Total number of commands processed by the server") ,
+    Item.new(name: "instantaneous_ops_per_sec"       , key: nil   , key2: nil       , category: "stats"       , info: "Number of commands processed per second") ,
+    Item.new(name: "rejected_connections"            , key: nil   , key2: nil       , category: "stats"       , info: "Number of connections rejected because of maxclients limit") ,
+    Item.new(name: "expired_keys"                    , key: nil   , key2: nil       , category: "stats"       , info: "Total number of key expiration events") ,
+    Item.new(name: "evicted_keys"                    , key: nil   , key2: nil       , category: "stats"       , info: "Number of evicted keys due to maxmemory limit") ,
+    Item.new(name: "keyspace_hits"                   , key: nil   , key2: nil       , category: "stats"       , info: "Number of successful lookup of keys in the main dictionary") ,
+    Item.new(name: "keyspace_misses"                 , key: nil   , key2: nil       , category: "stats"       , info: "Number of failed lookup of keys in the main dictionary") ,
+    Item.new(name: "pubsub_channels"                 , key: nil   , key2: nil       , category: "stats"       , info: "Global number of pub/sub channels with client subscriptions") ,
+    Item.new(name: "pubsub_patterns"                 , key: nil   , key2: nil       , category: "stats"       , info: "Global number of pub/sub pattern with client subscriptions") ,
+    Item.new(name: "latest_fork_usec"                , key: nil   , key2: nil       , category: "stats"       , info: "Duration of the latest fork operation in microseconds") ,
+    Item.new(name: "master_last_io_seconds_ago"      , key: nil   , key2: nil       , category: "master"      , info: "Number of seconds since the last interaction with master") ,
+    Item.new(name: "master_sync_left_bytes"          , key: nil   , key2: nil       , category: "master"      , info: "Number of bytes left before SYNCing is complete") ,
+    Item.new(name: "master_sync_last_io_seconds_ago" , key: nil   , key2: nil       , category: "master"      , info: "Number of seconds since last transfer I/O during a SYNC operation") ,
+    Item.new(name: "master_link_down_since_seconds"  , key: nil   , key2: nil       , category: "master"      , info: "Number of seconds since the link is down") ,
+    Item.new(name: "connected_slaves"                , key: nil   , key2: nil       , category: "replication" , info: "Number of connected slaves") ,
+    Item.new(name: "used_cpu_sys"                    , key: nil   , key2: nil       , category: "cpu"         , info: "System CPU consumed by the Redis server") ,
+    Item.new(name: "used_cpu_user"                   , key: nil   , key2: nil       , category: "cpu"         , info: "User CPU consumed by the Redis server") ,
+    Item.new(name: "used_cpu_sys_children"           , key: nil   , key2: nil       , category: "cpu"         , info: "System CPU consumed by the background processes") ,
+    Item.new(name: "used_cpu_user_children"          , key: nil   , key2: nil       , category: "cpu"         , info: "User CPU consumed by the background processes") ,
+    # cmdstat_XXX:calls=XXX,usec=XXX,usecpercall=XXX
+    Item.new(name: "db0_keys"                        , key: "db0" , key2: "keys"    , category: "keyspace"    , info: "Number of keys, database db0") ,
+    Item.new(name: "db0_expires"                     , key: "db0" , key2: "expires" , category: "keyspace"    , info: "Number of keys with an expiration, database db0") ###
+  ]
+
+  class RedisCliCommand
+    attr_accessor :redis_cli_exe
+    attr_accessor :redis_cli_auth_file
+    attr_accessor :host
+    attr_accessor :port
+    attr_accessor :command
+
+    def self.init_from_env_and_filename(h)
+      obj = self.new
+      obj.redis_cli_exe       = h[:env]["redis_cli_exe"]       || "redis-cli"
+      obj.redis_cli_auth_file = h[:env]["redis_cli_auth_file"] || nil
+      m = /_([.\d]+)_(\d+)\z/.match(h[:filename])
+      obj.host = (m && m[1]) || "127.0.0.1"
+      obj.port = (m && m[2]) || "6379"
+      obj.command = h[:command]
+      obj
+    end
+
+    def self.init_from_env(h)
+      obj = self.new
+      obj.redis_cli_exe       = h[:env]["redis_cli_exe"]       || "redis-cli"
+      obj.redis_cli_auth_file = h[:env]["redis_cli_auth_file"] || nil
+      obj.host                = h[:host] || "127.0.0.1"
+      obj.port                = h[:port] || "6379"
+      obj.command             = h[:command]
+      obj
+    end
+
+    def command_str
+      [ [@redis_cli_exe]    ,
+        ["-h" , @host]      ,
+        ["-p" , @port]      ,
+        (@redis_cli_auth_file ? ["--auth-file" , @redis_cli_auth_file] : nil) ,
+        [@command]          ,
+        ["<" , "/dev/null"] ###
+      ].compact.flatten.join(" ")
+    end
+
+    def exec
+      IO.popen(command_str){|p| p.read }
+    end
+  end
+
+  def multi_redis_cli_info_kv
+    @servers.collect { |server|
+      str = RedisCliCommand.init_from_env(env: @env, host: server.host, port: server.port, command: "info").exec
+      info_kv = str.lines.find_all{|s| s.strip.length > 0 && !s[/^#/] }.collect{|s| a=s.split(/:/,2); OpenStruct.new(name: a[0], value: a[1]) }
+      OpenStruct.new(server: server, info_kv: info_kv)
+    }
+  end
+
+  def initialize(h)
+    @arg = h[:arg]
+    @env = h[:env]
+    @name = h[:filename].split(/_/,4).last
+    raise "no environment variable 'servers' or '#{@name}_servers'" unless (@env["#{@name}_servers"] || @env["servers"])
+    raise "no environment variable '#{@name}_items'"                unless @env["#{@name}_items"]
+    @servers = (@env["#{@name}_servers"] || @env["servers"]).split(/,/).collect{|s| a=s.split(/:/); OpenStruct.new(name: a[0], host: a[1], port: a[2]) }
+    @items   = @env["#{@name}_items"].split(/,/).collect{|s| ITEM_LIST.detect{|i| i.name == s } }.compact
+  end
+
+  def exec
+    info = multi_redis_cli_info_kv()
+    case @arg
+    when "autoconf"
+      if info.all?{|x| !x.info_kv.empty? && x.info_kv.first.name == "redis_version" }
+        puts "yes"
+      else
+        puts "no"
+      end
+    when "config"
+      config_graph().each { |x|
+        puts x.join(" ")
+      }
+      puts_list(type: :label, info: info)
+      puts_list(type: :info, info: info)
+    else
+      puts_list(type: :value, info: info)
+    end
+  end
+
+  def config_graph
+    a = @env.find_all{|k,v| k.start_with?("#{@name}_graph_") }.collect{|k,v| [k.sub(/\A#{@name}_/,""), v] }
+    [ ["graph_title"    , "Redis Servers Info" ] ,
+      ["graph_category" , "redis"              ] ,
+      ["graph_vlabel"   , "value"              ] ###
+    ].each { |k,v|
+      a << [k,v] unless a.assoc(k)
+    }
+    a
+  end
+
+  def puts_list(h)
+    @items.each { |item|
+      @servers.each { |server|
+        serverinfo = h[:info].detect{|x| x.server.name == server.name }
+        if serverinfo
+          if item.key
+            namevalue = serverinfo.info_kv.detect{|x| x.name == item.key }
+            if namevalue
+              valuekv = namevalue.value.split(/,/).collect{|s| s.split(/=/, 2) }.assoc(item.key2)
+              if valuekv
+                v = valuekv.last
+              end
+            end
+          else
+            namevalue = serverinfo.info_kv.detect{|x| x.name == item.name }
+            if namevalue
+              v = namevalue.value
+            end
+          end
+          if v
+            name = [item.name, "_", server.name].join
+            case h[:type]
+            when :label
+              puts [name, ".label", " ", name     ].join
+            when :info
+              puts [name, ".info" , " ", item.info].join
+            when :value
+              puts [name, ".value", " ", v        ].join
+            end
+          end
+        end
+      }
+    }
+  end
+end
+
+RedisInfo.new(arg: ARGV[0], env: ENV, filename: $0).exec
