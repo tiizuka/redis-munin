@@ -131,7 +131,7 @@ class RedisInfo
         puts "no"
       end
     when "config"
-      config_graph().each { |x|
+      (config_graph() + config_each_field()).each { |x|
         puts x.join(" ")
       }
       puts_list(type: :label, info: info)
@@ -148,6 +148,19 @@ class RedisInfo
       ["graph_vlabel"   , "value"              ] ###
     ].each { |k,v|
       a << [k,v] unless a.assoc(k)
+    }
+    a
+  end
+
+  def config_each_field
+    a = []
+    @env.find_all{|k,v| k.start_with?("#{@name}_each_field_") }.collect{|k,v| [k.sub(/\A#{@name}_each_field_/,""), v] }.each { |k,v|
+      @items.each { |item|
+        @servers.each { |server|
+          name = [item.name, "_", server.name].join
+          a << [[name, k].join("."), v]
+        }
+      }
     }
     a
   end
